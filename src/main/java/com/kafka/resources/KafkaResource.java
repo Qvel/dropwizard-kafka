@@ -1,6 +1,8 @@
 package com.kafka.resources;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -20,6 +22,7 @@ import org.slf4j.LoggerFactory;
 
 import com.codahale.metrics.annotation.Timed;
 import com.kafka.api.Saying;
+import com.kafka.core.KafkaMessageDTO;
 
 @Path("/kafka-ep")
 @Produces(MediaType.APPLICATION_JSON)
@@ -53,21 +56,27 @@ public class KafkaResource {
     @Path("/producer")
     @Timed
     public Saying sendMessage(@QueryParam("message") String message) {
-        kafkaProducerBean.send(new ProducerRecord<>("my-topic", message, message));
+        kafkaProducerBean.send(new ProducerRecord<>("my-topic", String.valueOf(counter.incrementAndGet()), message));
         return new Saying(counter.incrementAndGet(), message);
     }
 
     @GET
     @Path("/consumer")
     @Timed
-    public Saying getMessage() {
+    public List<KafkaMessageDTO> getMessage() {
         ConsumerRecords<String, String> records = kafkaConsumerBean.poll(Duration.ofMinutes(3));
+        List<KafkaMessageDTO> kafkaMessageDTOList = new ArrayList<>();
         for (ConsumerRecord<String, String> record : records) {
             LOGGER.info("offset = {}, key = {}, value = {}", record.offset(), record.key(), record.value());
             LOGGER.info("topic = {}", record.topic());
-            LOGGER.info(record.toString());
+            kafkaMessageDTOList.add(new KafkaMessageDTO(record.value(),
+                                record.key(),
+                                record.topic(),
+                                String.valueOf(record.offset()),
+                                String.valueOf(record.partition())));
         }
-        return new Saying(counter.incrementAndGet(), records.toString());
+        kafkaConsumerBean.close();
+        return kafkaMessageDTOList;
     }
 
 }
